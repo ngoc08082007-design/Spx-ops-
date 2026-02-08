@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SPX Express</title>
+    <title>SPX Express - Track Oders</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         :root { --spx-orange: #ee4d2d; --success: #28a745; --error: #dc3545; --dark-bg: #1a1a1a; }
@@ -16,26 +16,35 @@
         .btn-login { width: 100%; padding: 15px; background: var(--spx-orange); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
 
         /* HEADER */
-        .header { background: var(--spx-orange); padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; height: 45px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 100; }
+        .header { background: var(--spx-orange); padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; height: 45px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 200; }
         .btn-exit { font-size: 12px; border: 1px solid rgba(255,255,255,0.5); padding: 5px 10px; border-radius: 4px; cursor: pointer; }
 
-        /* CAMERA */
-        #reader { flex-grow: 1; position: relative; overflow: hidden; background: black; }
-        #reader video { object-fit: cover; width: 100%; height: 100%; }
+        /* KHU VỰC CAMERA (Tương đối để chứa các lớp phủ) */
+        #camera-wrapper { flex-grow: 1; position: relative; background: black; overflow: hidden; }
         
-        /* CONTROLS */
-        .cam-controls { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 15px; z-index: 100; }
+        /* Video Container (Nằm dưới cùng) */
+        #reader { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        #reader video { object-fit: cover; width: 100%; height: 100%; }
+
+        /* Lớp phủ UI (Nằm đè lên video) */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+
+        /* CONTROLS (Nút bấm) - Cho phép ấn (pointer-events: auto) */
+        .cam-controls { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 15px; pointer-events: auto; }
         .control-btn { 
             width: 45px; height: 45px; border-radius: 50%; 
             background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.4); 
             color: white; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(4px); transition: 0.2s;
         }
+        .control-btn:active { transform: scale(0.9); }
+        .btn-power { border-color: #ff4d4d; color: #ff4d4d; background: rgba(50,0,0,0.6); }
+        .btn-power.off { background: #ff4d4d; color: white; }
 
         /* KHUNG QUÉT */
         .scan-frame {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 250px; height: 250px; pointer-events: none; transition: all 0.2s;
+            width: 250px; height: 250px; transition: all 0.2s;
         }
         .corner { position: absolute; width: 30px; height: 30px; border: 4px solid white; transition: 0.2s; }
         .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; }
@@ -46,15 +55,16 @@
         .scan-frame.valid .corner { border-color: var(--success); box-shadow: 0 0 15px var(--success); }
         .scan-frame.invalid .corner { border-color: var(--error); box-shadow: 0 0 15px var(--error); }
 
-        /* PANEL */
-        .bottom-panel { background: white; color: #333; padding: 15px; border-top-left-radius: 20px; border-top-right-radius: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -5px 15px rgba(0,0,0,0.3); }
+        /* PANEL KẾT QUẢ */
+        .bottom-panel { background: white; color: #333; padding: 15px; border-top-left-radius: 20px; border-top-right-radius: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -5px 15px rgba(0,0,0,0.3); z-index: 100; position: relative;}
 
         .manual-input-group { display: flex; gap: 10px; }
-        .manual-input { flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; text-transform: uppercase; }
+        .manual-input { flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; text-transform: uppercase; font-weight: bold;}
         .manual-btn { background: #333; color: white; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
         .status-box { text-align: center; padding: 5px; min-height: 40px; }
-        .status-text { font-size: 18px; font-weight: bold; word-break: break-all; margin: 0;}
+        .status-text { font-size: 18px; font-weight: bold; word-break: break-all; margin: 0; color: #333; }
+        .status-hint { font-size: 12px; color: #888; }
         
         /* NÚT LINK SPX */
         #spx-link-btn {
@@ -66,7 +76,6 @@
 
         .log-container { height: 100px; overflow-y: auto; background: #f8f9fa; border-radius: 8px; padding: 5px; font-size: 13px; border: 1px solid #eee; }
         .log-item { padding: 6px 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-        .log-success { color: var(--success); } .log-error { color: var(--error); }
     </style>
 </head>
 <body>
@@ -76,8 +85,8 @@
     <audio id="sound-error" src="data:audio/mpeg;base64,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"></audio>
 
     <div id="login-screen">
-        <h2 style="color:var(--spx-orange); margin-bottom: 5px;">SPX Express</h2>
-        <p style="font-size: 12px; color: #666; margin-bottom: 30px;">Phiên bản v2.0.2.6</p>
+        <h2 style="color:var(--spx-orange); margin-bottom: 5px;">SPX Express - Track Oders</h2>
+        <p style="font-size: 12px; color: #666; margin-bottom: 30px;">Phiên bản V9.Dev </p>
         <div class="login-box">
             <input type="text" id="username" value="Ops147396" class="input-group">
             <input type="password" id="password" value="Trungngoc0808@" style="width: 100%; padding: 15px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px;">
@@ -88,29 +97,35 @@
     <div id="app-screen" style="display:none; flex-direction:column; height:100%;">
         <div class="header">
             <span>QUÉT MÃ VẬN ĐƠN</span>
-            <div class="btn-exit" onclick="location.reload()">Thoát</div>
+            <div class="btn-exit" onclick="location.reload()">Đăng xuất</div>
         </div>
         
-        <div id="reader">
-            <div id="scan-frame" class="scan-frame">
-                <div class="corner tl"></div><div class="corner tr"></div>
-                <div class="corner bl"></div><div class="corner br"></div>
-            </div>
-            <div class="cam-controls">
-                <div class="control-btn" id="swap-cam-btn" onclick="switchCamera()">📷</div>
-                <div class="control-btn" id="flash-btn" onclick="toggleFlash()">⚡</div>
+        <div id="camera-wrapper">
+            <div id="reader"></div>
+
+            <div id="ui-layer">
+                <div id="scan-frame" class="scan-frame">
+                    <div class="corner tl"></div><div class="corner tr"></div>
+                    <div class="corner bl"></div><div class="corner br"></div>
+                </div>
+                
+                <div class="cam-controls">
+                    <div class="control-btn btn-power" id="power-btn" onclick="toggleCamera()" title="Bật/Tắt Camera">📴</div>
+                    <div class="control-btn" id="swap-cam-btn" onclick="switchCamera()" title="Đổi Cam">📷</div>
+                    <div class="control-btn" id="flash-btn" onclick="toggleFlash()" title="Đèn Flash">⚡</div>
+                </div>
             </div>
         </div>
 
         <div class="bottom-panel">
             <div class="manual-input-group">
-                <input type="text" id="manual-code" class="manual-input" placeholder="Nhập mã thủ công...">
-                <button class="manual-btn" onclick="checkManual()">KIỂM TRA</button>
+                <input type="text" id="manual-code" class="manual-input" placeholder="Nhập mã...">
+                <button class="manual-btn" onclick="checkManual()">TÌM KIẾM</button>
             </div>
 
             <div class="status-box">
-                <div id="result-text" class="status-text">Sẵn sàng quét...</div>
-                <div id="result-hint" style="font-size:12px; color:#888;">Đưa mã vào khung hình</div>
+                <div id="result-text" class="status-text">Sẵn sàng...</div>
+                <div id="result-hint" class="status-hint">Đưa mã vào khung hoặc nhập tay</div>
             </div>
 
             <a id="spx-link-btn" href="#" target="_blank">📦 THEO DÕI TRÊN SPX.VN</a>
@@ -124,6 +139,7 @@
     let cameras = [];
     let currentCamIndex = 0;
     let isFlashOn = false;
+    let isCameraOn = false;
     let lastCode = "";
     let lastTime = 0;
 
@@ -145,9 +161,10 @@
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('app-screen').style.display = 'flex';
             initCamera();
-        } else { alert("Sai thông tin!"); }
+        } else { alert("Error - Sai tài khoản hoặc mật khẩu!"); }
     }
 
+    // --- LOGIC CAMERA ---
     function initCamera() {
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
@@ -158,8 +175,22 @@
         });
     }
 
+    function toggleCamera() {
+        const powerBtn = document.getElementById('power-btn');
+        if (isCameraOn) {
+            html5QrCode.stop().then(() => {
+                isCameraOn = false;
+                powerBtn.classList.add('off'); // Đổi màu nút thành đỏ đặc
+                document.getElementById('result-text').innerText = "Đã tắt Camera";
+            });
+        } else {
+            startScanner(cameras[currentCamIndex].id);
+            powerBtn.classList.remove('off');
+        }
+    }
+
     function switchCamera() {
-        if(cameras.length < 2) return;
+        if (!isCameraOn || cameras.length < 2) return;
         html5QrCode.stop().then(() => {
             currentCamIndex = (currentCamIndex + 1) % cameras.length;
             isFlashOn = false; updateFlashIcon();
@@ -168,10 +199,11 @@
     }
 
     function toggleFlash() {
+        if(!isCameraOn) return;
         if(html5QrCode) {
             html5QrCode.applyVideoConstraints({ advanced: [{ torch: !isFlashOn }] })
             .then(() => { isFlashOn = !isFlashOn; updateFlashIcon(); })
-            .catch(err => alert("Máy không hỗ trợ bật đèn qua Web!"));
+            .catch(err => alert("Lỗi bật Flash (hoặc không hỗ trợ)"));
         }
     }
 
@@ -182,7 +214,7 @@
     }
 
     function startScanner(cameraId) {
-        html5QrCode = new Html5Qrcode("reader");
+        if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
         html5QrCode.start(cameraId, { fps: 30, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, 
         (decodedText) => {
             const now = Date.now();
@@ -190,17 +222,25 @@
                 processCode(decodedText);
                 lastTime = now; lastCode = decodedText;
             }
+        }).then(() => {
+            isCameraOn = true;
+            document.getElementById('power-btn').classList.remove('off');
         }).catch(err => console.log(err));
     }
 
     function checkManual() {
         const input = document.getElementById('manual-code');
         const code = input.value.trim().toUpperCase();
-        if(code) { processCode(code); input.value = ""; input.blur(); }
+        if(code) { processCode(code); } // Không xóa input để user dễ sửa nếu cần
     }
 
+    // --- XỬ LÝ KẾT QUẢ ---
     function processCode(text) {
         playSound('sound-start');
+        
+        // AUTO-FILL: Điền mã vào ô nhập tay
+        document.getElementById('manual-code').value = text;
+
         const isValid = /^SPXVN\d{12}$/.test(text);
         const frame = document.getElementById('scan-frame');
         const resText = document.getElementById('result-text');
@@ -215,11 +255,9 @@
             resText.innerText = text;
             resText.style.color = "var(--success)";
             resHint.innerText = "HỢP LỆ (OK)";
+            resHint.style.color = "var(--success)";
             
-            // --- SỬA LỖI LINK Ở ĐÂY ---
-            // Chỉ gửi mã vận đơn, bỏ "orders="
             linkBtn.href = `https://spx.vn/track?${text}`; 
-            
             linkBtn.style.display = "block";
             linkBtn.innerText = `📦 TRA CỨU: ${text}`;
             addLog(text, "success");
@@ -229,7 +267,9 @@
             frame.className = "scan-frame invalid";
             resText.innerText = text;
             resText.style.color = "var(--error)";
-            resHint.innerText = "SAI ĐỊNH DẠNG";
+            resHint.innerText = "VUI LÒNG NHẬP ĐÚNG MÃ VẬN ĐƠN";
+            resHint.style.color = "var(--error)";
+
             linkBtn.style.display = "none";
             if (navigator.vibrate) navigator.vibrate(200);
             addLog(text, "error");
